@@ -5,6 +5,7 @@ specifiers:
   '@vitejs/plugin-vue': ^2.3.3
   axios: ^0.27.2
   element-plus: ^2.2.2
+  spark-md5: ^3.0.2
   typescript: ^4.5.4
   unplugin-auto-import: ^0.8.5
   unplugin-vue-components: ^0.19.6
@@ -15,6 +16,7 @@ specifiers:
 dependencies:
   axios: registry.npmmirror.com/axios/0.27.2
   element-plus: registry.npmmirror.com/element-plus/2.2.2_vue@3.2.36
+  spark-md5: 3.0.2
   vue: registry.npmmirror.com/vue/3.2.36
 
 devDependencies:
@@ -230,6 +232,10 @@ packages:
     requiresBuild: true
     dev: true
     optional: true
+
+  /spark-md5/3.0.2:
+    resolution: {integrity: sha512-wcFzz9cDfbuqe0FZzfi2or1sgyIrsDwmPwfZC4hiNidPdPINjeUwNfv5kldczoEAcjl9Y1L3SM7Uz2PUEQzxQw==}
+    dev: false
 
   /to-fast-properties/2.0.0:
     resolution: {integrity: sha1-3F5pjL0HkmW8c+A3doGk5Og/YW4=}
