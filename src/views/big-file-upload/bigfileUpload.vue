@@ -5,7 +5,8 @@ import { ref } from 'vue'
 defineProps<{ msg: string }>()
 const myRef = ref<HTMLInputElement | null>(null)
 const chooseFile = () => {
-  const file: any = myRef.value?.files[0]
+  // @ts-ignore
+  const file = myRef.value.files[0]
   let formData = new FormData()
   formData.append('file', file)
   formData.append('filename', file.name)
@@ -42,7 +43,7 @@ const updateFile = () => {}
 <style scoped>
 .item {
   height: 200px;
-  width: 400px;
+  width: 600px;
   border: 1px dashed #ccc;
 }
 .btns {
