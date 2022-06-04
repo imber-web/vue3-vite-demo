@@ -2,26 +2,25 @@
 import axios from 'axios'
 import { ref } from 'vue'
 
+axios.defaults.headers.post['Content-Type'] = 'multipart/form-data'
 defineProps<{ msg: string }>()
+
 const myRef = ref<HTMLInputElement | null>(null)
-const chooseFile = () => {
+
+const chooseImg = () => {
   // @ts-ignore
   const file = myRef.value.files[0]
   let formData = new FormData()
   formData.append('file', file)
   formData.append('filename', file.name)
-  console.log(formData)
-  axios.defaults.headers.post['Content-Type'] = 'multipart/form-data'
   axios({
     method: 'post',
-    url: 'http://localhost:8000/upload_single',
+    url: 'http://localhost:8000/upload_img',
     data: formData
   }).then((res) => {
     console.log(res.data)
   })
 }
-
-const updateFile = () => {}
 </script>
 
 <template>
@@ -34,8 +33,7 @@ const updateFile = () => {}
         accept=".png,.jpg,.jpeg"
         ref="myRef"
       />
-      <el-button @click="chooseFile">选择文件</el-button>
-      <el-button @click="updateFile">上传到服务器</el-button>
+      <el-button @click="chooseImg">上传图片到服务器</el-button>
     </div>
   </div>
 </template>
