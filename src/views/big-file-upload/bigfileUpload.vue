@@ -56,12 +56,14 @@ const chooseFile = async () => {
   // 获取已经上传的切片信息，传{HASH}
   console.log(HASH, '通过spark-md5获取的hash发请求拿到already')
   data = axios({
-    method: 'post',
-    url: 'http://localhost:8888/upload_already',
-    data: {
+    method: 'get',
+    url: 'http://127.0.0.1:8888/upload_already',
+    params: {
       HASH
     },
-    headers: {}
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
   })
   // 如果成功
   if (+data.code === 0) {
@@ -103,7 +105,7 @@ const chooseFile = async () => {
     if (index < count) return
     try {
       data = await axios({
-        url: '/upload_merge',
+        url: 'http://127.0.0.1:8888/upload_merge',
         data: {
           HASH: HASH,
           count: count
