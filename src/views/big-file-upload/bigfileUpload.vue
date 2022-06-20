@@ -4,11 +4,10 @@ import { ref } from 'vue'
 import SparkMD5 from 'spark-md5'
 axios.defaults.headers.post['Content-Type'] = 'multipart/form-data'
 
-// https://juejin.cn/post/6915795898609975309
 defineProps<{ msg: string }>()
 const myRef = ref<HTMLInputElement | null>(null)
 
-// 接收file，返回buffer，HASH，suffix,filename
+//计算hash
 const changeBuffer = (file: Blob) => {
   return new Promise((resolve) => {
     let fileReader = new FileReader()
@@ -18,12 +17,8 @@ const changeBuffer = (file: Blob) => {
       let buffer = e.target?.result
       let spark = new SparkMD5.ArrayBuffer()
       let HASH: any
-      // 后缀
-      let suffix: any
-      // console.log('buffer', buffer)
-      // console.log('spark', spark)
+      let suffix: any // 后缀
       spark.append(buffer)
-      // console.log('spark2', spark)
       //增量式
       HASH = spark.end()
       // @ts-ignore
@@ -34,130 +29,123 @@ const changeBuffer = (file: Blob) => {
         suffix,
         filenmae: `${HASH}.${suffix}`
       })
-      // console.log(HASH, 'HASH')
     }
   })
 }
-
-// 选择文件并上传
-const chooseFile = async () => {
-  // @ts-ignore
-  // 拿到file对象
-  const file = myRef.value.files[0]
-  //如果没有 就return
-  if (!file) return
-  // 表示已经上传的数组
-  let already: any = []
-  // 后端返回的数据
-  let data: any = null
-  // @ts-ignore
-  // 通过changeBuffer获取hash和suffix后缀名
-  let { HASH, suffix } = await changeBuffer(file)
-  // 获取已经上传的切片信息，传{HASH}
-  console.log(HASH, '通过spark-md5获取的hash发请求拿到already')
-  data = axios({
+//获取chunks（分片）
+const getFileChunks = (file: any, HASH: any, suffix: any) => {
+  const size = 50 * 10 * 1024
+  let fileChunks: any = []
+  let index = 0 //序号
+  for (let cur = 0; cur < file?.size; cur += size) {
+    fileChunks.push({
+      file: file?.slice(cur, cur + size),
+      filename: `${HASH}_${index + 1}.${suffix}`
+    })
+  }
+  return fileChunks
+}
+//上传完通知合并
+const postmerge = (HASH: any) => {
+  return axios({
+    method: 'post',
+    url: 'http://127.0.0.1:8888/upload_merge',
+    data: {
+      HASH: HASH
+    },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
+  })
+}
+//获取已上传信息
+const getalready = (HASH: any) => {
+  return axios({
     method: 'get',
     url: 'http://127.0.0.1:8888/upload_already',
     params: {
-      HASH
+      HASH: HASH
     },
     headers: {
       'Content-Type': 'multipart/form-data'
     }
   })
-  // 如果成功
-  if (+data.code === 0) {
-    // 给已经上传的数组赋值
-    already = data.fileList
+}
+//上传切片（秒传，续传，并发控制）
+const postChunks = async (
+  list: any,
+  HASH: any,
+  fileChunks: any,
+  fileList: any
+) => {
+  if (list.length === 0) {
+    await postmerge(HASH)
+    return
   }
-  console.log(already, 'already获取')
-  // 最大的一个片大小
-  let max = 1024 * 100
-  // 有多少片
-  let count = Math.ceil(file.size / max)
-  // 计数
-  let index = 0
-  // chunk数组
-  let chunks = []
-  // 片》100
-  if (count > 100) {
-    //最大的一个片大小为/100 --- 避免太多片了估计
-    max = file.size / 100
-    // 就有100片
-    count = 100
-  }
-  //当计数index<总的片
-  while (index < count) {
-    // chunk数组添加每一个对象
-    chunks.push({
-      file: file.slice(index * max, (index + 1) * max),
-      filename: `${HASH}_${index + 1}.${suffix}`
-    })
-    index++
-  }
-  console.log(chunks, '这个chunks啥样的')
-  //上传成功的处理
-  index = 0
-
-  //已上传完成
-  const complate = async () => {
-    index++
-    if (index < count) return
-    try {
-      data = await axios({
-        url: 'http://127.0.0.1:8888/upload_merge',
-        data: {
-          HASH: HASH,
-          count: count
-        },
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      })
-      if (+data.code === 0) {
-        alert(
-          `恭喜您，文件上传成功，您可以基于 ${data.servicePath} 访问该文件~~`
-        )
-        return
-      }
-      throw data.codeText
-    } catch (err) {
-      console.log(err)
-    }
-  }
-
-  //切片上传
-  chunks.forEach((chunk) => {
-    // 已经上传的无需上传
-    if (already.length > 0 && already.includes(chunk.filename)) {
-      complate()
+  let pool: any = []
+  let max = 3
+  let finish = 0
+  let failList: any = [] //续传
+  for (let i = 0; i < fileChunks.length; i++) {
+    let item = fileChunks[i]
+    // 秒传
+    if (fileList.includes(item.filename)) {
+      console.log('已经上传了,直接视为成功，秒传')
       return
     }
-    let fm = new FormData()
-    fm.append('file', chunk.file)
-    fm.append('filename', chunk.filename)
-    axios({
+    let formData = new FormData()
+    formData.append('file', item.file)
+    formData.append('filename', item.filename)
+    let task = axios({
+      method: 'post',
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      },
       url: 'http://localhost:8888/upload_chunk',
-      data: fm
+      data: formData
     })
-      .then((data: any) => {
-        if (+data.code === 0) {
-          complate()
-          return
-        }
-        return Promise.reject(data.codeText)
+    task
+      .then((data) => {
+        //请求结束后将该Promise任务从并发池中移除
+        let index = pool.findIndex((t: any) => t === task)
+        pool.splice(index, 1)
       })
       .catch(() => {
-        console.log('切片上传失败')
+        failList.push(item)
       })
-  })
+      .finally(() => {
+        finish++
+        if (finish === list.length) {
+          postChunks(failList, HASH, fileChunks, fileList)
+        }
+      })
+    pool.push(task)
+    if (pool.length === max) {
+      //每当并发池跑完一个任务，就再塞入一个任务
+      await Promise.race(pool)
+    }
+  }
 }
 
 // Blob、ArrayBuffer、File可以归为一类，它们都是数据；
 // FileReader算是一种工具，用来读取数据；
 // FormData可以看做是一个应用数据的场景。
-// -Blob作为一个整体文件，适合用于传输；
+// Blob作为一个整体文件，适合用于传输；
 // 而只有需要关注细节（比如要修改某一段数据时），才需要用到ArrayBuffer
+const chooseFile = async () => {
+  // @ts-ignore 第一步：拿到文件对象
+  const file: any = myRef.value?.files[0]
+  // @ts-ignore 第二步：计算hash
+  let { HASH, suffix } = await changeBuffer(file)
+  // @ts-ignore 第三步：获取切片，切片上传功能
+  let fileChunks = getFileChunks(file, HASH, suffix)
+  // 第四步发请求查看已经上传完的信息
+  let {
+    data: { fileList }
+  } = await getalready(HASH)
+  //第五步 上传切片（没有上传的、断点续传功能，秒传功能）
+  await postChunks(fileChunks, HASH, fileChunks, fileList)
+}
 </script>
 
 <template>
@@ -165,12 +153,8 @@ const chooseFile = async () => {
     <h1>{{ msg }}</h1>
     <div class="btns">
       <!-- wins必须在js做限制 -->
-      <input
-        type="file"
-        class="upload_inp"
-        accept=".png,.jpg,.jpeg"
-        ref="myRef"
-      />
+      <!-- accept=".png,.jpg,.jpeg" -->
+      <input type="file" class="upload_inp" ref="myRef" />
       <el-button @click="chooseFile">上传大文件到服务器</el-button>
     </div>
   </div>
