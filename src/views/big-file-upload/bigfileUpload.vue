@@ -34,13 +34,13 @@ const changeBuffer = (file: Blob) => {
 }
 //获取chunks（分片）
 const getFileChunks = (file: any, HASH: any, suffix: any) => {
-  const size = 50 * 10 * 1024
+  const size = 50 * 1024
   let fileChunks: any = []
-  let index = 0 //序号
+  let index = 1 //序号
   for (let cur = 0; cur < file?.size; cur += size) {
     fileChunks.push({
       file: file?.slice(cur, cur + size),
-      filename: `${HASH}_${index + 1}.${suffix}`
+      filename: `${HASH}_${index++}.${suffix}`
     })
   }
   return fileChunks
@@ -50,9 +50,7 @@ const postmerge = (HASH: any) => {
   return axios({
     method: 'post',
     url: 'http://127.0.0.1:8888/upload_merge',
-    data: {
-      HASH: HASH
-    },
+    data: `HASH=${HASH}`,
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded'
     }
@@ -71,14 +69,31 @@ const getalready = (HASH: any) => {
     }
   })
 }
-//上传切片（秒传，续传，并发控制）
+//或者还需要上传的切片（断点续传）
+const getLastChunks = (fileList: any, fileChunks: any) => {
+  let result: any = []
+  fileChunks.forEach((item: any, index: any) => {
+    const fileName1 = item.filename
+    let exist = false //要push的
+    fileList.forEach((ite: any, idx: any) => {
+      const fileName2 = ite
+      if (fileName1 === fileName2) {
+        exist = true //不要push
+      }
+    })
+    if (!exist) {
+      result.push(item)
+    }
+  })
+  return result
+}
+//上传切片（并发控制）
 const postChunks = async (
-  list: any,
+  failChunks: any, //失败重传
   HASH: any,
-  fileChunks: any,
-  fileList: any
+  lastChunks: any
 ) => {
-  if (list.length === 0) {
+  if (failChunks.length === 0) {
     await postmerge(HASH)
     return
   }
@@ -86,13 +101,8 @@ const postChunks = async (
   let max = 3
   let finish = 0
   let failList: any = [] //续传
-  for (let i = 0; i < fileChunks.length; i++) {
-    let item = fileChunks[i]
-    // 秒传
-    if (fileList.includes(item.filename)) {
-      console.log('已经上传了,直接视为成功，秒传')
-      return
-    }
+  for (let i = 0; i < lastChunks.length; i++) {
+    let item = lastChunks[i]
     let formData = new FormData()
     formData.append('file', item.file)
     formData.append('filename', item.filename)
@@ -115,8 +125,8 @@ const postChunks = async (
       })
       .finally(() => {
         finish++
-        if (finish === list.length) {
-          postChunks(failList, HASH, fileChunks, fileList)
+        if (finish === lastChunks.length) {
+          postChunks(failList, HASH, lastChunks)
         }
       })
     pool.push(task)
@@ -137,14 +147,21 @@ const chooseFile = async () => {
   const file: any = myRef.value?.files[0]
   // @ts-ignore 第二步：计算hash
   let { HASH, suffix } = await changeBuffer(file)
-  // @ts-ignore 第三步：获取切片，切片上传功能
+  // @ts-ignore 第三步：获取切片，（分片上传功能）
   let fileChunks = getFileChunks(file, HASH, suffix)
   // 第四步发请求查看已经上传完的信息
   let {
     data: { fileList }
   } = await getalready(HASH)
-  //第五步 上传切片（没有上传的、断点续传功能，秒传功能）
-  await postChunks(fileChunks, HASH, fileChunks, fileList)
+  //第五步，根据已经上传过的计算出还需要上传的切片数组（断点续传功能）
+  let lastChunks = getLastChunks(fileList, fileChunks)
+  // 秒传功能,应该后端去查询数据，如果有对应hash文件，则可以视为秒传
+  if (lastChunks.length === 0) {
+    alert('已经上传过了')
+    return
+  }
+  //第六步 上传切片
+  await postChunks(lastChunks, HASH, lastChunks)
 }
 </script>
 
