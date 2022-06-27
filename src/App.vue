@@ -4,12 +4,17 @@
 // TODO:点击不能跳转对应组件1
 import imgUpload from '@/views/big-file-upload/imgUpload.vue'
 import bigfileUpload from '@/views/big-file-upload/bigfileUpload.vue'
+import countDown from '@/views/countDown/countDown.vue'
+const onTime = () => {
+  console.log('执行ontime')
+}
 </script>
 
 <template>
   <div class="content">
     <imgUpload msg="图片上传" />
     <bigfileUpload msg="大文件上传" />
+    <countDown :time="10" :onTime="onTime" />
   </div>
 </template>
 

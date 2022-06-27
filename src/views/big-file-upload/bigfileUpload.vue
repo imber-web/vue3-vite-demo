@@ -130,6 +130,7 @@ const postChunks = async (
         }
       })
     pool.push(task)
+    console.log(pool)
     if (pool.length === max) {
       //每当并发池跑完一个任务，就再塞入一个任务
       await Promise.race(pool)
